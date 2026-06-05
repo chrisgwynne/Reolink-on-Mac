@@ -1,0 +1,44 @@
+name: macOS Build
+
+# Compiles the SwiftUI app so CI fails on any compile error.
+# Signing/notarisation are intentionally skipped for now.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: macos-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ReolinkClient (xcodebuild)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show toolchain versions
+        run: |
+          xcodebuild -version
+          swift --version
+          python3 --version
+
+      - name: Generate Xcode project
+        run: python3 generate_xcodeproj.py
+
+      - name: Build (Debug, no signing)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project ReolinkClient.xcodeproj \
+            -scheme ReolinkClient \
+            -configuration Debug \
+            -destination 'generic/platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            clean build
