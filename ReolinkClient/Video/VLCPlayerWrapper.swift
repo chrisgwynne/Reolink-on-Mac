@@ -15,8 +15,11 @@ protocol RTSPPlayerEngine: AnyObject {
     var rendererView: NSView { get }
 
     /// Begin playback of `url`. Safe to call again with a new URL to switch
-    /// streams (e.g. main ↔ sub) without recreating the engine.
+    /// sources (live ↔ recorded clip, main ↔ sub) without recreating the engine.
     func play(url: URL)
+
+    /// Pause or resume playback in place (used for recorded clips).
+    func setPaused(_ paused: Bool)
 
     /// Stop playback but keep the engine reusable.
     func stop()
@@ -30,7 +33,11 @@ protocol RTSPPlayerEngine: AnyObject {
     /// Invoked when buffering/opening, before the first frame.
     var onBuffering: (() -> Void)? { get set }
 
-    /// Invoked on error or end-of-stream with a human-readable reason.
+    /// Invoked when the media reaches its natural end (e.g., a recorded clip
+    /// finishes). Distinct from a failure so callers can choose not to reconnect.
+    var onEnded: (() -> Void)? { get set }
+
+    /// Invoked on a playback error with a human-readable reason.
     var onFailure: ((String) -> Void)? { get set }
 }
 
@@ -48,9 +55,14 @@ final class VLCPlayerWrapper: NSObject, RTSPPlayerEngine, VLCMediaPlayerDelegate
 
     var onPlaying: (() -> Void)?
     var onBuffering: (() -> Void)?
+    var onEnded: (() -> Void)?
     var onFailure: ((String) -> Void)?
 
     var rendererView: NSView { videoView }
+
+    /// Set while we intentionally stop the player (swap/stop/teardown) so the
+    /// resulting `.stopped` notification isn't misreported as a stream drop.
+    private var isIntentionallyStopping = false
 
     override init() {
         super.init()
@@ -59,8 +71,9 @@ final class VLCPlayerWrapper: NSObject, RTSPPlayerEngine, VLCMediaPlayerDelegate
     }
 
     func play(url: URL) {
-        // Switching streams: stop the current media before swapping.
+        // Switching sources: stop the current media before swapping.
         if player.isPlaying || currentURL != nil {
+            isIntentionallyStopping = true
             player.stop()
         }
         currentURL = url
@@ -75,15 +88,26 @@ final class VLCPlayerWrapper: NSObject, RTSPPlayerEngine, VLCMediaPlayerDelegate
             "clock-synchro": 0
         ])
         player.media = media
+        isIntentionallyStopping = false
         player.play()
     }
 
+    func setPaused(_ paused: Bool) {
+        if paused {
+            if player.isPlaying { player.pause() }
+        } else {
+            if !player.isPlaying { player.play() }
+        }
+    }
+
     func stop() {
+        isIntentionallyStopping = true
         player.stop()
         currentURL = nil
     }
 
     func teardown() {
+        isIntentionallyStopping = true
         player.stop()
         player.delegate = nil
         player.drawable = nil
@@ -100,9 +124,12 @@ final class VLCPlayerWrapper: NSObject, RTSPPlayerEngine, VLCMediaPlayerDelegate
             onPlaying?()
         case .error:
             onFailure?("Playback error")
-        case .ended, .stopped:
-            // Only treat as a drop if we were actively streaming something.
-            if currentURL != nil {
+        case .ended:
+            // Natural end of media (e.g., a recorded clip finished).
+            onEnded?()
+        case .stopped:
+            // Either our own stop (ignore) or, for live RTSP, an unexpected drop.
+            if !isIntentionallyStopping, currentURL != nil {
                 onFailure?("Stream ended")
             }
         default:
@@ -120,6 +147,7 @@ final class VLCPlayerWrapper: NSObject, RTSPPlayerEngine {
 
     var onPlaying: (() -> Void)?
     var onBuffering: (() -> Void)?
+    var onEnded: (() -> Void)?
     var onFailure: ((String) -> Void)?
 
     var rendererView: NSView { placeholder }
@@ -128,6 +156,7 @@ final class VLCPlayerWrapper: NSObject, RTSPPlayerEngine {
         onFailure?("RTSP engine not linked. Add the VLCKitSPM package to enable live video.")
     }
 
+    func setPaused(_ paused: Bool) {}
     func stop() {}
     func teardown() {}
 }

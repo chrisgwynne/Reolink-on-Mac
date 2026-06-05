@@ -32,25 +32,35 @@ struct CameraDetailView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Picker("Quality", selection: qualityBinding) {
-                    ForEach(StreamQuality.allCases) { q in
-                        Text(q.displayName).tag(q)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .fixedSize()
-
-                if viewModel.streamState.isActive {
-                    Button { viewModel.stop() } label: {
-                        Label("Stop", systemImage: "stop.fill")
+                if case .recording = viewModel.source {
+                    // Viewing a recorded clip — offer a clear way back to live.
+                    Label("Recorded clip", systemImage: "play.rectangle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button { viewModel.returnToLive() } label: {
+                        Label("Back to Live", systemImage: "dot.radiowaves.left.and.right")
                     }
                 } else {
-                    Button { viewModel.start() } label: {
-                        Label("Start", systemImage: "play.fill")
+                    Picker("Quality", selection: qualityBinding) {
+                        ForEach(StreamQuality.allCases) { q in
+                            Text(q.displayName).tag(q)
+                        }
                     }
-                }
-                Button { viewModel.refresh() } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
+                    .pickerStyle(.segmented)
+                    .fixedSize()
+
+                    if viewModel.streamState.isActive {
+                        Button { viewModel.stop() } label: {
+                            Label("Stop", systemImage: "stop.fill")
+                        }
+                    } else {
+                        Button { viewModel.start() } label: {
+                            Label("Start", systemImage: "play.fill")
+                        }
+                    }
+                    Button { viewModel.refresh() } label: {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
                 }
                 Button {
                     Task { await snapshot() }

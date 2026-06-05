@@ -247,14 +247,42 @@ actor ReolinkAPIClient {
                 let endDate = Self.date(from: end, calendar: calendar)
             else { return nil }
 
+            // The `name` field is the recording file reference needed for playback.
+            let name = file["name"] as? String
+
             return CameraEvent(
                 cameraID: camera.id,
                 kind: Self.eventKind(from: file["type"] as? String),
                 startTime: startDate,
                 endTime: endDate,
-                hasRecording: true
+                hasRecording: name != nil,
+                recordingName: name
             )
         }
+    }
+
+    /// Build a playback stream URL for a recorded clip.
+    ///
+    /// Reolink streams a recording over HTTP via the `Playback` command, which
+    /// VLCKit can open directly. Requires a valid login token (call ``login``
+    /// first). The credentials never appear — only the short-lived token does.
+    func playbackURL(forRecording name: String) throws -> URL {
+        if camera.isMock {
+            // Mock playback is handled by the synthesized player; no real URL.
+            return URL(string: "mock://playback/\(name)")!
+        }
+        try ensureToken()
+        guard var components = urlComponents(path: "/cgi-bin/api.cgi") else {
+            throw APIError.invalidURL
+        }
+        components.queryItems = [
+            URLQueryItem(name: "cmd", value: "Playback"),
+            URLQueryItem(name: "source", value: name),
+            URLQueryItem(name: "output", value: name),
+            URLQueryItem(name: "token", value: token)
+        ]
+        guard let url = components.url else { throw APIError.invalidURL }
+        return url
     }
 
     // MARK: - Request plumbing

@@ -55,12 +55,14 @@ enum MockMedia {
         return kinds.enumerated().map { index, item in
             let begin = calendar.date(byAdding: .hour, value: item.1, to: start) ?? start
             let end = begin.addingTimeInterval(Double(20 + index * 5))
+            let hasRecording = index % 2 == 0
             return CameraEvent(
                 cameraID: cameraID,
                 kind: item.0,
                 startTime: begin,
                 endTime: end,
-                hasRecording: index % 2 == 0
+                hasRecording: hasRecording,
+                recordingName: hasRecording ? "Mp4Record/mock_\(index).mp4" : nil
             )
         }
     }

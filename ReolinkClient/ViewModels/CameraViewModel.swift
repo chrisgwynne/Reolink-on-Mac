@@ -22,6 +22,12 @@ final class CameraViewModel: ObservableObject {
     /// Currently selected stream quality (Main/Sub). Drives the quality selector.
     @Published private(set) var activeQuality: StreamQuality
 
+    /// What the player is currently showing: the live feed or a recorded clip.
+    @Published private(set) var source: PlaybackSource = .live
+
+    /// Whether playback is paused (recorded clips). Observed by the player view.
+    @Published private(set) var isPaused = false
+
     private let store: CameraStore
     private let api: ReolinkAPIClient
 
@@ -65,6 +71,7 @@ final class CameraViewModel: ObservableObject {
         candidateIndex = 0
         reconnectAttempt = 0
         hasEverPlayed = false
+        isPaused = false
         stream = nil
         streamState = .idle
     }
@@ -77,10 +84,90 @@ final class CameraViewModel: ObservableObject {
         start(quality: quality)
     }
 
-    /// User-initiated retry from the error state.
+    /// User-initiated retry from the error state. Replays whatever the current
+    /// source is — the live feed or the recorded clip.
     func retry() {
+        switch source {
+        case .live:
+            stop()
+            start()
+        case .recording(let event):
+            playEvent(event)
+        }
+    }
+
+    // MARK: - Recorded event playback
+
+    /// Play a recorded clip for `event` through the same player/engine used for
+    /// live view. No second engine is created — only the stream URL changes.
+    func playEvent(_ event: CameraEvent) {
+        guard event.hasRecording else {
+            streamState = .failed(message: "No recording is available for this event.", canRetry: false)
+            return
+        }
+        cancelTimers()
+        source = .recording(event)
+        isPaused = false
+        reconnectAttempt = 0
+        candidateIndex = 0
+        hasEverPlayed = false
+        lastError = nil
+        streamState = .connecting
+
+        if camera.isMock {
+            stream = nil
+            hasEverPlayed = true
+            streamState = .playing
+            return
+        }
+
+        guard let name = event.recordingName else {
+            streamState = .failed(message: "Recording reference unavailable.", canRetry: false)
+            return
+        }
+
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let password = try self.store.password(for: self.camera) ?? ""
+                try await self.api.login(password: password)
+                let url = try await self.api.playbackURL(forRecording: name)
+                self.candidateURLs = [url]
+                self.candidateIndex = 0
+                self.playCurrentCandidate()
+            } catch {
+                self.streamState = .failed(message: error.localizedDescription, canRetry: true)
+            }
+        }
+    }
+
+    /// Pause or resume the current recorded clip.
+    func togglePause() {
+        guard case .recording = source else { return }
+        guard streamState.isPlaying || isPaused else { return }
+        isPaused.toggle()
+    }
+
+    /// Stop any recorded playback and return to the live feed.
+    func returnToLive() {
         stop()
+        source = .live
         start()
+    }
+
+    /// The engine reached the natural end of the media.
+    func playerDidEnd() {
+        switch source {
+        case .live:
+            // A live RTSP feed shouldn't "end"; treat as a drop and reconnect.
+            handleProblem(reason: "Stream ended", isStall: false)
+        case .recording:
+            // A recorded clip finished playing — stop cleanly and offer replay.
+            cancelTimers()
+            isPaused = false
+            stream = nil
+            streamState = .idle
+        }
     }
 
     /// Switch between Main and Sub streams without restarting the app. The player
@@ -121,6 +208,8 @@ final class CameraViewModel: ObservableObject {
 
     private func beginPlayback(resetState: Bool) {
         cancelTimers()
+        source = .live
+        isPaused = false
         if resetState {
             reconnectAttempt = 0
             candidateIndex = 0
@@ -173,7 +262,14 @@ final class CameraViewModel: ObservableObject {
         cancelTimers()
         lastError = reason
 
-        // First, exhaust alternate URLs (e.g., legacy h264Preview_*) for this attempt.
+        // Recorded playback: no live-style URL fallback or reconnect loop —
+        // surface a readable error with Retry (which replays the clip).
+        if case .recording = source {
+            Task { await finishFailed() }
+            return
+        }
+
+        // Live: first exhaust alternate URLs (e.g., legacy h264Preview_*).
         if candidateIndex + 1 < candidateURLs.count {
             candidateIndex += 1
             if isStall { streamState = .stalled }

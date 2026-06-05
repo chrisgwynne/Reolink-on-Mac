@@ -12,13 +12,18 @@ struct CameraEvent: Identifiable, Hashable {
     /// this event. Drives the "Playback not supported" fallback in the UI.
     let hasRecording: Bool
 
+    /// The Reolink recording file reference (the `name` from a `Search`
+    /// result), used to build the playback stream URL. Not a secret.
+    let recordingName: String?
+
     init(
         id: UUID = UUID(),
         cameraID: UUID,
         kind: EventKind,
         startTime: Date,
         endTime: Date,
-        hasRecording: Bool
+        hasRecording: Bool,
+        recordingName: String? = nil
     ) {
         self.id = id
         self.cameraID = cameraID
@@ -26,9 +31,16 @@ struct CameraEvent: Identifiable, Hashable {
         self.startTime = startTime
         self.endTime = endTime
         self.hasRecording = hasRecording
+        self.recordingName = recordingName
     }
 
     var duration: TimeInterval { endTime.timeIntervalSince(startTime) }
+}
+
+/// What a camera's player is currently showing.
+enum PlaybackSource: Equatable {
+    case live
+    case recording(CameraEvent)
 }
 
 /// The classification reported for an event.

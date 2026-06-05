@@ -76,19 +76,71 @@ struct EventListView: View {
                     "\(event.kind.displayName) • \(event.startTime.formatted(date: .omitted, time: .standard))",
                     systemImage: "play.rectangle.fill"
                 )
-                Text("Playback streams the recorded clip over RTSP from the camera's SD card.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Button {
-                    // Hook for real playback: build a playback RTSP/HTTP URL and
-                    // hand it to the player. Left as an integration point.
-                } label: {
-                    Label("Play Clip", systemImage: "play.fill")
+                if isActive(event) {
+                    activePlaybackControls
+                } else {
+                    Text("Plays the recorded clip in the main view, using the same player as live.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button {
+                        viewModel.playEvent(event)
+                    } label: {
+                        // "Replay" once this clip has already been shown.
+                        Label(hasBeenShown(event) ? "Replay Clip" : "Play Clip",
+                              systemImage: "play.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    if hasBeenShown(event) {
+                        Button {
+                            viewModel.returnToLive()
+                        } label: {
+                            Label("Back to Live", systemImage: "dot.radiowaves.left.and.right")
+                        }
+                    }
                 }
-                .buttonStyle(.borderedProminent)
             } else {
                 Label("Playback not supported for this model", systemImage: "exclamationmark.circle")
                     .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// Whether this event's clip is loaded AND actively loading/playing.
+    /// (When it has finished or failed, the play/replay path is shown instead.)
+    private func isActive(_ event: CameraEvent) -> Bool {
+        viewModel.source == .recording(event) && viewModel.streamState.isActive
+    }
+
+    /// Whether this event is the current playback source (playing, finished, or failed).
+    private func hasBeenShown(_ event: CameraEvent) -> Bool {
+        viewModel.source == .recording(event)
+    }
+
+    /// Pause/resume + back-to-live controls shown while a clip is playing.
+    @ViewBuilder
+    private var activePlaybackControls: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(viewModel.isPaused ? Color.yellow : .green)
+                .frame(width: 8, height: 8)
+            Text(viewModel.isPaused ? "Paused" : viewModel.streamState.label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+
+        HStack {
+            Button {
+                viewModel.togglePause()
+            } label: {
+                Label(viewModel.isPaused ? "Resume" : "Pause",
+                      systemImage: viewModel.isPaused ? "play.fill" : "pause.fill")
+            }
+            .disabled(!(viewModel.streamState.isPlaying || viewModel.isPaused))
+
+            Button {
+                viewModel.returnToLive()
+            } label: {
+                Label("Back to Live", systemImage: "dot.radiowaves.left.and.right")
             }
         }
     }

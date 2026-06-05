@@ -22,7 +22,11 @@ struct RTSPPlayerView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        context.coordinator.sync(stream: viewModel.stream, isMock: viewModel.camera.isMock)
+        context.coordinator.sync(
+            stream: viewModel.stream,
+            isMock: viewModel.camera.isMock,
+            isPaused: viewModel.isPaused
+        )
     }
 
     static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
@@ -39,6 +43,8 @@ struct RTSPPlayerView: NSViewRepresentable {
         /// stream's UUID (not URL) so a Refresh with an identical URL still forces
         /// a replay.
         private var currentStreamID: UUID?
+        /// Last pause value applied to the engine, so we only toggle on change.
+        private var appliedPaused = false
         private weak var container: NSView?
         private var mockView: MockFrameView?
 
@@ -50,7 +56,7 @@ struct RTSPPlayerView: NSViewRepresentable {
             self.container = container
         }
 
-        func sync(stream: CameraStream?, isMock: Bool) {
+        func sync(stream: CameraStream?, isMock: Bool, isPaused: Bool) {
             guard let container else { return }
 
             if isMock {
@@ -64,13 +70,20 @@ struct RTSPPlayerView: NSViewRepresentable {
                 if currentStreamID != nil {
                     engine?.stop()
                     currentStreamID = nil
+                    appliedPaused = false
                 }
                 return
             }
-            if stream.id == currentStreamID { return }
-            currentStreamID = stream.id
-            installEngineIfNeeded(in: container)
-            engine?.play(url: stream.url)
+            if stream.id != currentStreamID {
+                currentStreamID = stream.id
+                appliedPaused = false
+                installEngineIfNeeded(in: container)
+                engine?.play(url: stream.url)
+            } else if isPaused != appliedPaused {
+                // Same source, pause state toggled (recorded-clip pause/resume).
+                appliedPaused = isPaused
+                engine?.setPaused(isPaused)
+            }
         }
 
         private func installEngineIfNeeded(in container: NSView) {
@@ -81,6 +94,9 @@ struct RTSPPlayerView: NSViewRepresentable {
             }
             engine.onBuffering = { [weak self] in
                 Task { @MainActor in self?.viewModel.playerIsBuffering() }
+            }
+            engine.onEnded = { [weak self] in
+                Task { @MainActor in self?.viewModel.playerDidEnd() }
             }
             engine.onFailure = { [weak self] reason in
                 Task { @MainActor in self?.viewModel.playerDidFail(reason) }

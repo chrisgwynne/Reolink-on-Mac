@@ -19,7 +19,9 @@ SwiftUI app with:
 - ✅ Single-camera live view and 1×1 / 2×2 / 3×3 / 4×4 grids
 - ✅ Snapshots saved to `~/Pictures/Reolink Snapshots`
 - ✅ PTZ pad + zoom (hidden when unsupported)
-- ✅ Events list by date with playback-capability fallback
+- ✅ Events list by date, with **recorded clip playback** through the same VLC
+  player as live (play, pause/resume, back-to-live, retry); "Playback not
+  supported" fallback for models without it
 - ✅ ONVIF WS-Discovery (best effort)
 - ✅ **Mock camera mode** so you can run the app with no hardware
 
