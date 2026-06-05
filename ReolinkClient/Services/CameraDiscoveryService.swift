@@ -18,39 +18,39 @@ final class CameraDiscoveryService {
     /// A camera found on the network. Deduplicated by ``host``.
     struct DiscoveredCamera: Identifiable, Hashable {
         let host: String
-        let name: String?
+        /// Raw ONVIF `name` scope. May be a generic label like "Camera".
+        let friendlyName: String?
         let manufacturer: String?
+        /// Raw ONVIF `hardware` scope (often the real model on Reolink).
+        let hardware: String?
+        /// Best identifier: the friendly name when meaningful, else the
+        /// hardware scope. See ``CameraDiscoveryService/makeDevice``.
         let model: String?
-        /// The ONVIF device service URL(s) advertised in the ProbeMatch.
+        /// The ONVIF device service URL advertised in the ProbeMatch.
         let xaddrs: String
+        /// Whether this looks like a Reolink device. Computed once at parse time;
+        /// unknown ONVIF cameras are still surfaced — this only drives highlighting.
+        let isLikelyReolink: Bool
 
         var id: String { host }
 
-        /// Best human-facing label for the device.
-        var displayName: String { name ?? model ?? host }
+        /// Best human-facing label: prefer the resolved model, then the raw
+        /// (possibly generic) name, then the host.
+        var displayName: String { model ?? friendlyName ?? host }
 
-        /// Secondary line: manufacturer/model, falling back to the service URL.
+        /// Secondary line: manufacturer and the raw advertised name when it
+        /// differs from the display name; falls back to the service URL.
         var subtitle: String {
             var parts: [String] = []
             if let manufacturer, !manufacturer.isEmpty { parts.append(manufacturer) }
-            if let model, !model.isEmpty, model != name { parts.append(model) }
+            if let friendlyName, !friendlyName.isEmpty, friendlyName != displayName {
+                parts.append("seen as “\(friendlyName)”")
+            }
             return parts.isEmpty ? xaddrs : parts.joined(separator: " • ")
         }
 
         /// Name to prefill into Add Camera.
-        var suggestedName: String { model ?? name ?? "Camera \(host)" }
-
-        /// Heuristic: does this look like a Reolink device? Unknown ONVIF
-        /// cameras are still shown — this only drives highlighting/ordering.
-        var isLikelyReolink: Bool {
-            let blob = [manufacturer, model, name, xaddrs]
-                .compactMap { $0 }
-                .joined(separator: " ")
-                .lowercased()
-            if blob.contains("reolink") { return true }
-            if let model, model.uppercased().hasPrefix("RL") { return true }
-            return false
-        }
+        var suggestedName: String { model ?? friendlyName ?? "Camera \(host)" }
     }
 
     private static let multicastHost = "239.255.255.250"
@@ -136,7 +136,19 @@ final class CameraDiscoveryService {
 
     // MARK: - Response parsing
 
-    /// Extract host, ONVIF scopes (name/manufacturer/model), and XAddrs.
+    /// Friendly names that carry no model information and should be treated as
+    /// weak labels (we prefer the hardware scope when one of these is the name).
+    private static let genericNames: Set<String> = [
+        "camera", "network camera", "ip camera", "onvif camera", "device"
+    ]
+
+    /// Tokens that mark a device as (likely) Reolink. Distinctive words are
+    /// matched as substrings; short model-family codes are matched at token
+    /// boundaries to avoid false positives (e.g. "go" inside another word).
+    private static let reolinkSubstrings = ["reolink", "argus", "trackmix"]
+    private static let reolinkTokenPrefixes = ["rlc", "rln", "rld", "duo", "e1", "cx", "go"]
+
+    /// Extract host, ONVIF scopes, and XAddrs from a ProbeMatch response.
     static func parseProbeMatch(_ data: Data) -> DiscoveredCamera? {
         guard let body = String(data: data, encoding: .utf8) else { return nil }
         guard let xaddrsRaw = firstTagValue(in: body, tag: "XAddrs"), !xaddrsRaw.isEmpty else {
@@ -147,14 +159,74 @@ final class CameraDiscoveryService {
         guard let url = URL(string: firstX), let host = url.host else { return nil }
 
         let scopes = parseScopes(firstTagValue(in: body, tag: "Scopes") ?? "")
-        let name = scopes["name"]
+        return makeDevice(host: host, xaddrs: firstX, scopes: scopes)
+    }
+
+    /// Build a ``DiscoveredCamera`` from parsed scope fields. Pure and
+    /// side-effect-free so it can be exercised by the parsing samples below.
+    static func makeDevice(host: String, xaddrs: String, scopes: [String: String]) -> DiscoveredCamera {
+        let name = scopes["name"]?.trimmingCharacters(in: .whitespaces)
+        let hardware = scopes["hardware"]?.trimmingCharacters(in: .whitespaces)
+        let manufacturer = (scopes["manufacturer"] ?? scopes["mfr"] ?? scopes["vendor"])?
+            .trimmingCharacters(in: .whitespaces)
+
+        let model = preferredModel(name: name, hardware: hardware)
+        let likely = isLikelyReolink(name: name, hardware: hardware,
+                                     manufacturer: manufacturer, xaddrs: xaddrs)
+
         return DiscoveredCamera(
             host: host,
-            name: name,
-            manufacturer: scopes["manufacturer"] ?? scopes["mfr"],
-            model: name ?? scopes["hardware"],   // Reolink encodes the model as the name scope
-            xaddrs: firstX
+            friendlyName: name?.isEmpty == false ? name : nil,
+            manufacturer: manufacturer?.isEmpty == false ? manufacturer : nil,
+            hardware: hardware?.isEmpty == false ? hardware : nil,
+            model: model,
+            xaddrs: xaddrs,
+            isLikelyReolink: likely
         )
+    }
+
+    /// Choose the most useful model/identifier: a meaningful friendly name wins;
+    /// when the name is generic, fall back to the hardware scope.
+    static func preferredModel(name: String?, hardware: String?) -> String? {
+        if let name, !name.isEmpty, !isGenericName(name) {
+            return name
+        }
+        if let hardware, !hardware.isEmpty {
+            return hardware
+        }
+        // Only a generic name (or nothing) available.
+        if let name, !name.isEmpty { return name }
+        return nil
+    }
+
+    static func isGenericName(_ name: String) -> Bool {
+        genericNames.contains(name.trimmingCharacters(in: .whitespaces).lowercased())
+    }
+
+    /// Heuristic Reolink detection across name/hardware/manufacturer/XAddrs.
+    /// Unknown ONVIF cameras simply return `false` (still shown, just not badged).
+    static func isLikelyReolink(name: String?, hardware: String?,
+                                manufacturer: String?, xaddrs: String) -> Bool {
+        let blob = [manufacturer, name, hardware, xaddrs]
+            .compactMap { $0 }
+            .joined(separator: " ")
+            .lowercased()
+        if reolinkSubstrings.contains(where: { blob.contains($0) }) {
+            return true
+        }
+        // Token-boundary match for short family codes (rlc, e1, cx, go, …).
+        let tokens = tokenize([manufacturer, name, hardware].compactMap { $0 }.joined(separator: " "))
+        for token in tokens where reolinkTokenPrefixes.contains(where: { token.hasPrefix($0) }) {
+            return true
+        }
+        return false
+    }
+
+    /// Lowercase alphanumeric tokens, split on any non-alphanumeric character.
+    private static func tokenize(_ text: String) -> [String] {
+        text.lowercased()
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map(String.init)
     }
 
     /// Parse ONVIF scope URIs (`onvif://www.onvif.org/<key>/<value>`) into a map.
@@ -182,17 +254,82 @@ final class CameraDiscoveryService {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    // MARK: - Mock results (previews / tests)
+    // MARK: - Mock results (previews / development)
 
-    /// Deterministic sample devices for SwiftUI previews and development.
+    /// Deterministic sample devices for SwiftUI previews and development. Built
+    /// through ``makeDevice`` so they exercise the real labelling logic.
     static let mockResults: [DiscoveredCamera] = [
-        DiscoveredCamera(host: "192.168.1.20", name: "RLC-810A", manufacturer: "Reolink",
-                         model: "RLC-810A", xaddrs: "http://192.168.1.20:8000/onvif/device_service"),
-        DiscoveredCamera(host: "192.168.1.21", name: "RLC-520A", manufacturer: "Reolink",
-                         model: "RLC-520A", xaddrs: "http://192.168.1.21:8000/onvif/device_service"),
-        DiscoveredCamera(host: "192.168.1.50", name: "Doorbell", manufacturer: "Acme",
-                         model: "IPC-Generic", xaddrs: "http://192.168.1.50:80/onvif/device_service")
+        makeDevice(host: "192.168.1.20",
+                   xaddrs: "http://192.168.1.20:8000/onvif/device_service",
+                   scopes: ["name": "Reolink RLC-810A", "hardware": "IPC_523128M8MP"]),
+        makeDevice(host: "192.168.1.21",
+                   xaddrs: "http://192.168.1.21:8000/onvif/device_service",
+                   scopes: ["name": "Camera", "hardware": "RLC-520A"]),
+        makeDevice(host: "192.168.1.50",
+                   xaddrs: "http://192.168.1.50/onvif/device_service",
+                   scopes: ["name": "ONVIF Camera"])
     ]
+
+    // MARK: - Parsing samples (documented expectations)
+
+    /// Representative ONVIF `Scopes`/`XAddrs` inputs and the expected resolved
+    /// display name + Reolink highlighting. Doubles as lightweight, runnable
+    /// regression coverage via ``parsingSelfCheck()``.
+    struct ParsingSample {
+        let label: String
+        let scopes: [String: String]
+        let xaddrs: String
+        let expectedDisplayName: String
+        let expectedReolink: Bool
+    }
+
+    static let parsingSamples: [ParsingSample] = [
+        ParsingSample(
+            label: "Reolink model in name scope",
+            scopes: ["name": "Reolink RLC-520A"],
+            xaddrs: "http://10.0.0.10:8000/onvif/device_service",
+            expectedDisplayName: "Reolink RLC-520A",
+            expectedReolink: true
+        ),
+        ParsingSample(
+            label: "Generic name, model in hardware scope",
+            scopes: ["name": "Camera", "hardware": "RLC-520A"],
+            xaddrs: "http://10.0.0.11:8000/onvif/device_service",
+            expectedDisplayName: "RLC-520A",
+            expectedReolink: true
+        ),
+        ParsingSample(
+            label: "Generic name + opaque hardware (unknown ONVIF)",
+            scopes: ["name": "Network Camera", "hardware": "IPC_51516M5M"],
+            xaddrs: "http://10.0.0.12/onvif/device_service",
+            expectedDisplayName: "IPC_51516M5M",
+            expectedReolink: false
+        ),
+        ParsingSample(
+            label: "Only a generic ONVIF name",
+            scopes: ["name": "ONVIF Camera"],
+            xaddrs: "http://10.0.0.13/onvif/device_service",
+            expectedDisplayName: "ONVIF Camera",
+            expectedReolink: false
+        )
+    ]
+
+    /// Run the documented samples through the parser; returns a human-readable
+    /// list of mismatches (empty == all pass). Usable from previews or a future
+    /// test target without any hardware.
+    static func parsingSelfCheck() -> [String] {
+        var failures: [String] = []
+        for sample in parsingSamples {
+            let device = makeDevice(host: "host", xaddrs: sample.xaddrs, scopes: sample.scopes)
+            if device.displayName != sample.expectedDisplayName {
+                failures.append("[\(sample.label)] displayName = \"\(device.displayName)\", expected \"\(sample.expectedDisplayName)\"")
+            }
+            if device.isLikelyReolink != sample.expectedReolink {
+                failures.append("[\(sample.label)] isLikelyReolink = \(device.isLikelyReolink), expected \(sample.expectedReolink)")
+            }
+        }
+        return failures
+    }
 }
 
 /// Tiny thread-safe set used to dedupe discovered hosts across the receive queue.
