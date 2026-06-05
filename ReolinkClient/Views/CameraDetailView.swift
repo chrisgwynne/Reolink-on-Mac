@@ -83,9 +83,7 @@ struct CameraDetailView: View {
                 RTSPPlayerView(viewModel: viewModel)
                     .background(Color.black)
 
-                if case .connecting = viewModel.streamState {
-                    ProgressView().controlSize(.large).tint(.white).padding()
-                }
+                centerOverlay
 
                 if let statusMessage {
                     Text(statusMessage)
@@ -102,6 +100,42 @@ struct CameraDetailView: View {
                 PTZControlView(viewModel: viewModel)
                     .padding()
             }
+        }
+    }
+
+    /// Loading spinner or error+Retry panel centered over the video.
+    @ViewBuilder
+    private var centerOverlay: some View {
+        switch viewModel.streamState {
+        case .connecting, .buffering:
+            ProgressView(viewModel.streamState.label)
+                .controlSize(.large).tint(.white)
+                .padding()
+        case .reconnecting, .stalled:
+            ProgressView(viewModel.streamState.label)
+                .controlSize(.large).tint(.yellow)
+                .padding()
+        case .failed(let message, let canRetry):
+            VStack(spacing: 12) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.largeTitle)
+                    .foregroundStyle(.yellow)
+                Text(message)
+                    .font(.callout)
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 360)
+                if canRetry {
+                    Button { viewModel.retry() } label: {
+                        Label("Retry", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+            .padding(24)
+            .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 12))
+        case .idle, .playing:
+            EmptyView()
         }
     }
 

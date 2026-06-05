@@ -119,6 +119,30 @@ keep working** (they render a synthesized frame loop, no engine needed).
 > Prefer FFmpegKit? Implement the `RTSPPlayerEngine` protocol with an FFmpeg
 > backend and swap it in `RTSPPlayerView.Coordinator.installEngineIfNeeded`.
 
+### Smoke-testing live RTSP against a real camera
+
+CI compiles and links VLCKit but cannot exercise a real stream (no camera on the
+runner), so verify playback locally:
+
+1. Build & run on **My Mac**, then **＋ Add Camera** with your camera's IP,
+   username, and password; **Test Connection** should report the model.
+2. The tile should go **Connecting… → Live** within a few seconds (sub stream).
+3. Open the large view (double-click). Toggle **Main/Sub** — video should switch
+   **in place** without the window reopening.
+4. Click **Refresh** — it should reload even though the URL is unchanged.
+5. **Failure paths:**
+   - Wrong password → after retries, the tile shows
+     "Authentication failed — check the username and password." with **Retry**.
+   - Unplug the camera / block its IP while Live → status goes
+     **Retrying (n)…** with exponential backoff, then recovers when restored.
+   - A camera that only serves the legacy URL scheme should still connect via the
+     automatic `h264Preview_*` fallback.
+6. Open a 2×2 grid with multiple cameras to confirm several simultaneous streams
+   render with reasonable CPU use (hardware decode via VideoToolbox).
+
+What to watch for: exactly one VLC instance per tile (reconnects reuse it), clean
+teardown when closing the detail view or stopping a tile, and no runaway CPU.
+
 ## How it works
 
 ### RTSP URLs

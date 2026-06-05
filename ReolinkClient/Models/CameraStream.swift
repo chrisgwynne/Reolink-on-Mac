@@ -34,26 +34,43 @@ struct CameraStream: Identifiable, Hashable {
 enum StreamState: Equatable {
     case idle
     case connecting
+    case buffering
     case playing
     case reconnecting(attempt: Int)
-    case failed(message: String)
+    case stalled
+    case failed(message: String, canRetry: Bool)
 
+    /// True while the pipeline is doing something (prevents duplicate starts).
     var isActive: Bool {
         switch self {
-        case .connecting, .playing, .reconnecting:
+        case .connecting, .buffering, .playing, .reconnecting, .stalled:
             return true
         case .idle, .failed:
             return false
         }
     }
 
+    /// True only when frames are actually rendering.
+    var isPlaying: Bool {
+        if case .playing = self { return true }
+        return false
+    }
+
+    /// True when the user should be offered a Retry action.
+    var isFailed: Bool {
+        if case .failed = self { return true }
+        return false
+    }
+
     var label: String {
         switch self {
         case .idle: return "Idle"
         case .connecting: return "Connecting…"
+        case .buffering: return "Buffering…"
         case .playing: return "Live"
-        case .reconnecting(let attempt): return "Reconnecting (\(attempt))…"
-        case .failed(let message): return message
+        case .reconnecting(let attempt): return "Retrying (\(attempt))…"
+        case .stalled: return "Stalled — recovering…"
+        case .failed(let message, _): return message
         }
     }
 }

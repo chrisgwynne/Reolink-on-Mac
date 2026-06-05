@@ -18,11 +18,15 @@ struct CameraTileView: View {
             RTSPPlayerView(viewModel: viewModel)
                 .background(Color.black)
 
-            if case .connecting = viewModel.streamState {
+            switch viewModel.streamState {
+            case .connecting, .buffering:
                 ProgressView().controlSize(.large).tint(.white)
-            }
-            if case .reconnecting = viewModel.streamState {
+            case .reconnecting, .stalled:
                 ProgressView().controlSize(.large).tint(.yellow)
+            case .failed(let message, let canRetry):
+                errorOverlay(message: message, canRetry: canRetry)
+            case .idle, .playing:
+                EmptyView()
             }
 
             VStack {
@@ -117,6 +121,33 @@ struct CameraTileView: View {
         }
     }
 
+    /// Centered error panel with a Retry action.
+    private func errorOverlay(message: String, canRetry: Bool) -> some View {
+        VStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.title)
+                .foregroundStyle(.yellow)
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .lineLimit(3)
+                .padding(.horizontal, 12)
+            if canRetry {
+                Button {
+                    viewModel.retry()
+                } label: {
+                    Label("Retry", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+        }
+        .padding(16)
+        .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 10))
+        .padding(20)
+    }
+
     private func iconButton(_ system: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: system)
@@ -131,7 +162,8 @@ struct CameraTileView: View {
         let color: Color
         switch viewModel.streamState {
         case .playing: color = .green
-        case .connecting, .reconnecting: color = .yellow
+        case .connecting, .buffering: color = .yellow
+        case .reconnecting, .stalled: color = .orange
         case .failed: color = .red
         case .idle: color = .gray
         }

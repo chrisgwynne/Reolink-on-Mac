@@ -24,8 +24,22 @@ final class CameraViewModel: ObservableObject {
 
     private let store: CameraStore
     private let api: ReolinkAPIClient
+
+    // Reconnect / stall handling.
     private var reconnectTask: Task<Void, Never>?
+    private var watchdogTask: Task<Void, Never>?
     private let maxReconnectAttempts = 6
+    /// Seconds allowed to reach `.playing` before a connect is judged stalled.
+    private let stallTimeout: TimeInterval = 12
+
+    // Candidate RTSP URLs for the active quality, in priority order
+    // (modern `Preview_*` first, legacy `h264Preview_*` as fallback).
+    private var candidateURLs: [URL] = []
+    private var candidateIndex = 0
+    private var reconnectAttempt = 0
+    /// Whether we ever reached `.playing` this session — distinguishes a dropped
+    /// connection (reconnect) from a never-worked connection (classify + fail).
+    private var hasEverPlayed = false
 
     init(camera: Camera, store: CameraStore) {
         self.camera = camera
@@ -36,118 +50,214 @@ final class CameraViewModel: ObservableObject {
 
     // MARK: - Live view lifecycle
 
-    /// Prepare the stream URL and begin playback. Idempotent.
+    /// Prepare candidate URLs and begin playback. Idempotent while active.
     func start(quality: StreamQuality? = nil) {
         guard !streamState.isActive else { return }
         if let quality { activeQuality = quality }
-        let desired = activeQuality
-        streamState = .connecting
-        lastError = nil
-
-        Task {
-            do {
-                let password = try store.password(for: camera) ?? ""
-                if camera.isMock {
-                    // Mock streams have no real URL; the player view shows a
-                    // synthesized frame loop instead.
-                    self.stream = nil
-                    self.streamState = .playing
-                    return
-                }
-                let url = try RTSPURLBuilder.url(for: camera, password: password, quality: desired)
-                self.stream = CameraStream(cameraID: camera.id, quality: desired, url: url)
-                // The RTSPPlayerView reports back via `playerDidStart` /
-                // `playerDidFail`; until then we remain "connecting".
-            } catch {
-                self.handleFailure(error.localizedDescription)
-            }
-        }
+        beginPlayback(resetState: true)
     }
 
-    /// Stop playback and cancel any pending reconnect.
+    /// Stop playback, clear the stream, and cancel all timers. Leaves the engine
+    /// reusable (the player view keeps a single VLC instance per tile).
     func stop() {
-        reconnectTask?.cancel()
-        reconnectTask = nil
+        cancelTimers()
+        candidateURLs = []
+        candidateIndex = 0
+        reconnectAttempt = 0
+        hasEverPlayed = false
         stream = nil
         streamState = .idle
     }
 
-    /// Stop and immediately restart the current stream (manual refresh).
+    /// Stop and immediately restart the current stream (manual refresh). Works
+    /// even when the URL is unchanged because each restart mints a new stream id.
     func refresh() {
+        let quality = activeQuality
+        stop()
+        start(quality: quality)
+    }
+
+    /// User-initiated retry from the error state.
+    func retry() {
         stop()
         start()
     }
 
-    /// Switch between Main and Sub streams without restarting the app. The
-    /// player swaps media in place; no-op if already on the requested quality.
+    /// Switch between Main and Sub streams without restarting the app. The player
+    /// swaps media in place; no-op if already on the requested quality.
     func switchQuality(to quality: StreamQuality) {
         guard quality != activeQuality else { return }
         activeQuality = quality
         guard !camera.isMock else { return }
-
-        // Cancel any reconnect and rebuild the stream for the new quality.
-        reconnectTask?.cancel()
-        reconnectTask = nil
-        streamState = .connecting
-        Task {
-            do {
-                let password = try store.password(for: camera) ?? ""
-                let url = try RTSPURLBuilder.url(for: camera, password: password, quality: quality)
-                self.stream = CameraStream(cameraID: camera.id, quality: quality, url: url)
-            } catch {
-                self.handleFailure(error.localizedDescription)
-            }
-        }
+        beginPlayback(resetState: true)
     }
 
-    /// Called by the player layer once frames are flowing.
+    // MARK: - Player callbacks (from RTSPPlayerView)
+
+    /// Frames are flowing: clear timers and lock in the working URL.
     func playerDidStart() {
-        reconnectTask?.cancel()
-        reconnectTask = nil
+        cancelTimers()
+        hasEverPlayed = true
+        reconnectAttempt = 0
         streamState = .playing
     }
 
-    /// Called by the player layer while opening/buffering, before first frame.
+    /// Opening/buffering before the first frame. Give buffering a fresh stall
+    /// window since it represents progress toward playing.
     func playerIsBuffering() {
-        if case .playing = streamState { return }
-        if case .reconnecting = streamState { return }
-        streamState = .connecting
+        if streamState.isPlaying { return }
+        if case .connecting = streamState {
+            streamState = .buffering
+            startWatchdog()
+        }
     }
 
-    /// Called by the player layer when the connection drops or fails.
+    /// The engine reported an error or end-of-stream.
     func playerDidFail(_ message: String) {
-        scheduleReconnect(reason: message)
+        handleProblem(reason: message, isStall: false)
     }
 
-    private func handleFailure(_ message: String) {
-        lastError = message
-        streamState = .failed(message: message)
+    // MARK: - Private playback engine
+
+    private func beginPlayback(resetState: Bool) {
+        cancelTimers()
+        if resetState {
+            reconnectAttempt = 0
+            candidateIndex = 0
+            hasEverPlayed = false
+        }
+        lastError = nil
+        streamState = .connecting
+
+        if camera.isMock {
+            // Mock streams have no real URL; the player view shows a synthesized
+            // frame loop instead and we report "playing" immediately.
+            stream = nil
+            hasEverPlayed = true
+            streamState = .playing
+            return
+        }
+
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                self.candidateURLs = try self.buildCandidates(quality: self.activeQuality)
+                self.candidateIndex = 0
+                self.playCurrentCandidate()
+            } catch {
+                self.streamState = .failed(message: error.localizedDescription, canRetry: true)
+            }
+        }
     }
 
-    /// Exponential-backoff reconnect: 1, 2, 4, 8 … seconds, capped.
-    private func scheduleReconnect(reason: String) {
+    private func buildCandidates(quality: StreamQuality) throws -> [URL] {
+        let password = try store.password(for: camera) ?? ""
+        return try RTSPURLBuilder.candidateURLs(for: camera, password: password, quality: quality)
+    }
+
+    /// Load the current candidate URL into the player and arm the stall watchdog.
+    private func playCurrentCandidate() {
+        guard candidateIndex < candidateURLs.count else {
+            Task { await finishFailed() }
+            return
+        }
+        let url = candidateURLs[candidateIndex]
+        streamState = (reconnectAttempt > 0) ? .reconnecting(attempt: reconnectAttempt) : .connecting
+        // A fresh stream id guarantees the player replays even for an identical URL.
+        stream = CameraStream(cameraID: camera.id, quality: activeQuality, url: url)
+        startWatchdog()
+    }
+
+    /// A connect/play problem: try the next candidate URL, else back off & reconnect.
+    private func handleProblem(reason: String, isStall: Bool) {
+        cancelTimers()
+        lastError = reason
+
+        // First, exhaust alternate URLs (e.g., legacy h264Preview_*) for this attempt.
+        if candidateIndex + 1 < candidateURLs.count {
+            candidateIndex += 1
+            if isStall { streamState = .stalled }
+            playCurrentCandidate()
+            return
+        }
+
+        // All URLs tried → exponential backoff, then start over from the first URL.
+        scheduleReconnect(isStall: isStall)
+    }
+
+    /// Exponential-backoff reconnect: 1, 2, 4, 8 … seconds, capped at 30s.
+    private func scheduleReconnect(isStall: Bool) {
+        reconnectAttempt += 1
+        guard reconnectAttempt <= maxReconnectAttempts else {
+            Task { await finishFailed() }
+            return
+        }
+        let attempt = reconnectAttempt
+        streamState = isStall ? .stalled : .reconnecting(attempt: attempt)
+
+        let delay = min(pow(2.0, Double(attempt - 1)), 30)
         reconnectTask?.cancel()
         reconnectTask = Task { [weak self] in
-            guard let self else { return }
-            for attempt in 1...self.maxReconnectAttempts {
-                if Task.isCancelled { return }
-                await MainActor.run { self.streamState = .reconnecting(attempt: attempt) }
-
-                let delay = min(pow(2.0, Double(attempt - 1)), 30)
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-                if Task.isCancelled { return }
-
-                // Rebuild the stream to force the player to retry. Reset to
-                // `.idle` first so `start()`'s "already active" guard passes.
-                await MainActor.run {
-                    self.stream = nil
-                    self.streamState = .idle
-                    self.start()
-                }
-                return // start() will drive the next state transition
-            }
-            await MainActor.run { self.handleFailure("Failed to reconnect: \(reason)") }
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard let self, !Task.isCancelled else { return }
+            self.candidateIndex = 0
+            self.playCurrentCandidate()
         }
+    }
+
+    /// Arm a one-shot watchdog: if `.playing` isn't reached within `stallTimeout`,
+    /// treat the current candidate as stalled and recover.
+    private func startWatchdog() {
+        let timeout = stallTimeout
+        watchdogTask?.cancel()
+        watchdogTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+            guard let self, !Task.isCancelled else { return }
+            if self.streamState.isPlaying { return }
+            self.handleProblem(reason: "No video within \(Int(timeout))s", isStall: true)
+        }
+    }
+
+    /// Give up after exhausting URLs + attempts, producing a readable message.
+    private func finishFailed() async {
+        cancelTimers()
+        let message: String
+        if hasEverPlayed {
+            message = "Connection lost. \(lastError ?? "The stream stopped.")"
+        } else {
+            message = await classifyConnectFailure()
+        }
+        stream = nil
+        streamState = .failed(message: message, canRetry: true)
+    }
+
+    /// Probe the HTTP API to turn an opaque RTSP failure into a useful message
+    /// (auth vs. unreachable vs. unsupported stream).
+    private func classifyConnectFailure() async -> String {
+        do {
+            let password = try store.password(for: camera) ?? ""
+            try await api.login(password: password)
+            // Credentials valid and camera reachable → the RTSP stream itself failed.
+            return "Stream unavailable — this camera may not offer RTSP at the expected URL."
+        } catch let error as ReolinkAPIClient.APIError {
+            switch error {
+            case .apiFailure, .notLoggedIn:
+                return "Authentication failed — check the username and password."
+            case .httpStatus(let code):
+                return "Camera returned HTTP \(code) — check the port and credentials."
+            case .transport, .invalidURL:
+                return "Camera unreachable — check the address and network."
+            default:
+                return error.localizedDescription
+            }
+        } catch {
+            return "Camera unreachable — check the address and network."
+        }
+    }
+
+    private func cancelTimers() {
+        watchdogTask?.cancel(); watchdogTask = nil
+        reconnectTask?.cancel(); reconnectTask = nil
     }
 
     // MARK: - Snapshot
@@ -211,5 +321,6 @@ final class CameraViewModel: ObservableObject {
 
     deinit {
         reconnectTask?.cancel()
+        watchdogTask?.cancel()
     }
 }
