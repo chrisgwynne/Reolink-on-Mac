@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- App Sandbox. Enabled for a well-behaved Mac app. -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+
+    <!-- Outgoing connections: required for HTTP API calls and RTSP playback. -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+
+    <!-- Incoming/UDP: required for ONVIF WS-Discovery responses. -->
+    <key>com.apple.security.network.server</key>
+    <true/>
+
+    <!-- Read/write access to the user's Pictures folder for snapshots. -->
+    <key>com.apple.security.assets.pictures.read-write</key>
+    <true/>
+</dict>
+</plist>
