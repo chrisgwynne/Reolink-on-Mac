@@ -45,8 +45,27 @@ struct CameraTileView: View {
             Button("Open Large View", action: onOpenDetail)
             Button("Take Snapshot") { Task { await snapshot() } }
             Divider()
-            Button("Reconnect") { viewModel.stop(); viewModel.start() }
+            Picker("Stream Quality", selection: qualityBinding) {
+                ForEach(StreamQuality.allCases) { q in
+                    Text(q.displayName).tag(q)
+                }
+            }
+            Divider()
+            if viewModel.streamState.isActive {
+                Button("Stop Stream") { viewModel.stop() }
+            } else {
+                Button("Start Stream") { viewModel.start() }
+            }
+            Button("Refresh Stream") { viewModel.refresh() }
         }
+    }
+
+    /// Binding that drives the player to switch streams in place.
+    private var qualityBinding: Binding<StreamQuality> {
+        Binding(
+            get: { viewModel.activeQuality },
+            set: { viewModel.switchQuality(to: $0) }
+        )
     }
 
     private var topBar: some View {
@@ -73,17 +92,39 @@ struct CameraTileView: View {
                     .transition(.opacity)
             }
             Spacer()
-            Button {
-                Task { await snapshot() }
+
+            Menu {
+                Picker("Stream Quality", selection: qualityBinding) {
+                    ForEach(StreamQuality.allCases) { q in
+                        Text(q.displayName).tag(q)
+                    }
+                }
             } label: {
-                Image(systemName: "camera.fill")
-                    .padding(8)
-                    .background(.black.opacity(0.45), in: Circle())
+                Text(viewModel.activeQuality == .main ? "HD" : "SD")
+                    .font(.caption2.weight(.bold))
+                    .padding(.horizontal, 8).padding(.vertical, 6)
+                    .background(.black.opacity(0.45), in: Capsule())
                     .foregroundStyle(.white)
             }
-            .buttonStyle(.plain)
-            .disabled(viewModel.snapshotInProgress)
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+
+            iconButton("arrow.clockwise") { viewModel.refresh() }
+
+            iconButton("camera.fill") { Task { await snapshot() } }
+                .disabled(viewModel.snapshotInProgress)
         }
+    }
+
+    private func iconButton(_ system: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: system)
+                .padding(8)
+                .background(.black.opacity(0.45), in: Circle())
+                .foregroundStyle(.white)
+        }
+        .buttonStyle(.plain)
     }
 
     private var statusBadge: some View {

@@ -35,7 +35,10 @@ struct RTSPPlayerView: NSViewRepresentable {
     final class Coordinator {
         private let viewModel: CameraViewModel
         private var engine: RTSPPlayerEngine?
-        private var currentURL: URL?
+        /// Identity of the stream currently loaded into the engine. Keyed on the
+        /// stream's UUID (not URL) so a Refresh with an identical URL still forces
+        /// a replay.
+        private var currentStreamID: UUID?
         private weak var container: NSView?
         private var mockView: MockFrameView?
 
@@ -55,9 +58,17 @@ struct RTSPPlayerView: NSViewRepresentable {
                 return
             }
 
-            guard let stream else { return }
-            if stream.url == currentURL { return }
-            currentURL = stream.url
+            guard let stream else {
+                // The view model cleared the stream (Stop): halt playback but
+                // keep the engine so a later Start/Refresh can reuse it.
+                if currentStreamID != nil {
+                    engine?.stop()
+                    currentStreamID = nil
+                }
+                return
+            }
+            if stream.id == currentStreamID { return }
+            currentStreamID = stream.id
             installEngineIfNeeded(in: container)
             engine?.play(url: stream.url)
         }
@@ -67,6 +78,9 @@ struct RTSPPlayerView: NSViewRepresentable {
             let engine = VLCPlayerWrapper()
             engine.onPlaying = { [weak self] in
                 Task { @MainActor in self?.viewModel.playerDidStart() }
+            }
+            engine.onBuffering = { [weak self] in
+                Task { @MainActor in self?.viewModel.playerIsBuffering() }
             }
             engine.onFailure = { [weak self] reason in
                 Task { @MainActor in self?.viewModel.playerDidFail(reason) }
@@ -89,11 +103,11 @@ struct RTSPPlayerView: NSViewRepresentable {
         }
 
         func teardown() {
-            engine?.stop()
+            engine?.teardown()
             engine = nil
             mockView?.stop()
             mockView = nil
-            currentURL = nil
+            currentStreamID = nil
         }
     }
 }

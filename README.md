@@ -23,8 +23,13 @@ SwiftUI app with:
 - ✅ ONVIF WS-Discovery (best effort)
 - ✅ **Mock camera mode** so you can run the app with no hardware
 
-Live RTSP video requires linking a playback engine (VLCKit) — see below. Without
-it, mock cameras still render an animated placeholder so the whole UI is usable.
+- ✅ **Live RTSP playback** via VLCKit (SPM), main/sub streams, in-place quality
+  switching, start/stop/refresh, loading + error states, auto-reconnect
+- ✅ Multiple simultaneous streams (one player per tile)
+
+VLCKit is integrated through Swift Package Manager and resolves automatically —
+see "Live RTSP video" below. Without it, mock cameras still render an animated
+placeholder so the whole UI remains usable.
 
 ## Requirements
 
@@ -84,19 +89,32 @@ ReolinkClient/
    (usually `80`), username, and password, then **Test Connection**. On
    success, save — capabilities (PTZ/playback) are auto-detected.
 
-### Enabling live RTSP video (VLCKit)
+### Live RTSP video (VLCKit via Swift Package Manager)
 
-The app compiles and runs without a video engine. To play real camera streams:
+Live playback is powered by **VLCKit**, integrated through the
+[`tylerjonesio/vlckit-spm`](https://github.com/tylerjonesio/vlckit-spm) Swift
+package (product/module **`VLCKitSPM`**, pinned to `3.5.1`). The dependency is
+**already declared in the Xcode project** — Xcode resolves and downloads it
+automatically on first open/build. No manual steps are required.
 
-1. In Xcode: **File ▸ Add Package Dependencies…**
-2. Add VLCKit:
-   - URL: `https://code.videolan.org/videolan/VLCKit.git`
-   - (or the SwiftPM mirror, depending on the VLCKit release you target)
-3. Add the `VLCKit` library to the **ReolinkClient** target.
+On first build, expect a one-time download of the VLCKit binary framework
+(~hundreds of MB). To resolve it from the command line:
 
-`VLCPlayerWrapper.swift` already gates the real implementation behind
-`#if canImport(VLCKit)`, so simply linking the package activates live video —
-no code changes needed.
+```sh
+xcodebuild -project ReolinkClient.xcodeproj -scheme ReolinkClient \
+  -resolvePackageDependencies
+```
+
+On Apple Silicon, VLCKit decodes H.264/H.265 through **VideoToolbox**
+(hardware), so several tiles can stream at once with low CPU use. RTSP is
+forced over **TCP** with a small network cache for stability + low latency.
+
+#### Building without the package
+
+`VLCPlayerWrapper.swift` gates the real implementation behind
+`#if canImport(VLCKitSPM)`. If the package is removed, the app still compiles
+and runs — live tiles show a "engine not linked" message, and **mock cameras
+keep working** (they render a synthesized frame loop, no engine needed).
 
 > Prefer FFmpegKit? Implement the `RTSPPlayerEngine` protocol with an FFmpeg
 > backend and swap it in `RTSPPlayerView.Coordinator.installEngineIfNeeded`.

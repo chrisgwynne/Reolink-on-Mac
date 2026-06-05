@@ -72,6 +72,11 @@ def main():
     debug_tgt = oid("debug_tgt")
     release_tgt = oid("release_tgt")
 
+    # Swift Package Manager: VLCKit (via tylerjonesio/vlckit-spm, product "VLCKitSPM").
+    pkg_ref = oid("pkgref", "vlckit-spm")
+    pkg_prod = oid("pkgprod", "VLCKitSPM")
+    pkg_buildfile = oid("pkgbuild", "VLCKitSPM")
+
     group_ids = {folder: oid("group", folder) for folder in GROUPS if folder}
 
     w = lines.append
@@ -90,6 +95,7 @@ def main():
         w(f"\t\t{build_file_ids[rel]} /* {name} in Sources */ = {{isa = PBXBuildFile; fileRef = {file_refs[rel]} /* {name} */; }};")
     for rel in RESOURCES:
         w(f"\t\t{build_file_ids[rel]} /* {rel} in Resources */ = {{isa = PBXBuildFile; fileRef = {file_refs[rel]} /* {rel} */; }};")
+    w(f"\t\t{pkg_buildfile} /* VLCKitSPM in Frameworks */ = {{isa = PBXBuildFile; productRef = {pkg_prod} /* VLCKitSPM */; }};")
     w("/* End PBXBuildFile section */")
 
     # PBXFileReference
@@ -110,6 +116,7 @@ def main():
     w("\t\t\tisa = PBXFrameworksBuildPhase;")
     w("\t\t\tbuildActionMask = 2147483647;")
     w("\t\t\tfiles = (")
+    w(f"\t\t\t\t{pkg_buildfile} /* VLCKitSPM in Frameworks */,")
     w("\t\t\t);")
     w("\t\t\trunOnlyForDeploymentPostprocessing = 0;")
     w("\t\t};")
@@ -183,6 +190,9 @@ def main():
     w("\t\t\tdependencies = (")
     w("\t\t\t);")
     w(f'\t\t\tname = {APP};')
+    w("\t\t\tpackageProductDependencies = (")
+    w(f"\t\t\t\t{pkg_prod} /* VLCKitSPM */,")
+    w("\t\t\t);")
     w(f'\t\t\tproductName = {APP};')
     w(f"\t\t\tproductReference = {product_ref} /* {APP}.app */;")
     w("\t\t\tproductType = \"com.apple.product-type.application\";")
@@ -214,6 +224,9 @@ def main():
     w(f"\t\t\tmainGroup = {main_group};")
     w(f"\t\t\tproductRefGroup = {products_group} /* Products */;")
     w("\t\t\tprojectDirPath = \"\";")
+    w("\t\t\tpackageReferences = (")
+    w(f"\t\t\t\t{pkg_ref} /* XCRemoteSwiftPackageReference \"vlckit-spm\" */,")
+    w("\t\t\t);")
     w("\t\t\tprojectRoot = \"\";")
     w("\t\t\ttargets = (")
     w(f"\t\t\t\t{target_id} /* {APP} */,")
@@ -339,6 +352,27 @@ def main():
     w("\t\t\tdefaultConfigurationName = Release;")
     w("\t\t};")
     w("/* End XCConfigurationList section */")
+
+    # XCRemoteSwiftPackageReference
+    w("\n/* Begin XCRemoteSwiftPackageReference section */")
+    w(f'\t\t{pkg_ref} /* XCRemoteSwiftPackageReference "vlckit-spm" */ = {{')
+    w("\t\t\tisa = XCRemoteSwiftPackageReference;")
+    w('\t\t\trepositoryURL = "https://github.com/tylerjonesio/vlckit-spm.git";')
+    w("\t\t\trequirement = {")
+    w("\t\t\t\tkind = exactVersion;")
+    w("\t\t\t\tversion = 3.5.1;")
+    w("\t\t\t};")
+    w("\t\t};")
+    w("/* End XCRemoteSwiftPackageReference section */")
+
+    # XCSwiftPackageProductDependency
+    w("\n/* Begin XCSwiftPackageProductDependency section */")
+    w(f"\t\t{pkg_prod} /* VLCKitSPM */ = {{")
+    w("\t\t\tisa = XCSwiftPackageProductDependency;")
+    w(f'\t\t\tpackage = {pkg_ref} /* XCRemoteSwiftPackageReference "vlckit-spm" */;')
+    w("\t\t\tproductName = VLCKitSPM;")
+    w("\t\t};")
+    w("/* End XCSwiftPackageProductDependency section */")
 
     w("\t};")
     w(f"\trootObject = {project_id} /* Project object */;")

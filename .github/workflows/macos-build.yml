@@ -30,6 +30,13 @@ jobs:
       - name: Generate Xcode project
         run: python3 generate_xcodeproj.py
 
+      - name: Resolve Swift package dependencies (VLCKitSPM)
+        run: |
+          xcodebuild \
+            -project ReolinkClient.xcodeproj \
+            -scheme ReolinkClient \
+            -resolvePackageDependencies
+
       - name: Build (Debug, no signing)
         run: |
           set -o pipefail

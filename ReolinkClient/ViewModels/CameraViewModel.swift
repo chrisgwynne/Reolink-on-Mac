@@ -19,6 +19,9 @@ final class CameraViewModel: ObservableObject {
     @Published var events: [CameraEvent] = []
     @Published var loadingEvents = false
 
+    /// Currently selected stream quality (Main/Sub). Drives the quality selector.
+    @Published private(set) var activeQuality: StreamQuality
+
     private let store: CameraStore
     private let api: ReolinkAPIClient
     private var reconnectTask: Task<Void, Never>?
@@ -28,6 +31,7 @@ final class CameraViewModel: ObservableObject {
         self.camera = camera
         self.store = store
         self.api = ReolinkAPIClient(camera: camera)
+        self.activeQuality = camera.preferredStream
     }
 
     // MARK: - Live view lifecycle
@@ -35,7 +39,8 @@ final class CameraViewModel: ObservableObject {
     /// Prepare the stream URL and begin playback. Idempotent.
     func start(quality: StreamQuality? = nil) {
         guard !streamState.isActive else { return }
-        let desired = quality ?? camera.preferredStream
+        if let quality { activeQuality = quality }
+        let desired = activeQuality
         streamState = .connecting
         lastError = nil
 
@@ -67,11 +72,46 @@ final class CameraViewModel: ObservableObject {
         streamState = .idle
     }
 
+    /// Stop and immediately restart the current stream (manual refresh).
+    func refresh() {
+        stop()
+        start()
+    }
+
+    /// Switch between Main and Sub streams without restarting the app. The
+    /// player swaps media in place; no-op if already on the requested quality.
+    func switchQuality(to quality: StreamQuality) {
+        guard quality != activeQuality else { return }
+        activeQuality = quality
+        guard !camera.isMock else { return }
+
+        // Cancel any reconnect and rebuild the stream for the new quality.
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        streamState = .connecting
+        Task {
+            do {
+                let password = try store.password(for: camera) ?? ""
+                let url = try RTSPURLBuilder.url(for: camera, password: password, quality: quality)
+                self.stream = CameraStream(cameraID: camera.id, quality: quality, url: url)
+            } catch {
+                self.handleFailure(error.localizedDescription)
+            }
+        }
+    }
+
     /// Called by the player layer once frames are flowing.
     func playerDidStart() {
         reconnectTask?.cancel()
         reconnectTask = nil
         streamState = .playing
+    }
+
+    /// Called by the player layer while opening/buffering, before first frame.
+    func playerIsBuffering() {
+        if case .playing = streamState { return }
+        if case .reconnecting = streamState { return }
+        streamState = .connecting
     }
 
     /// Called by the player layer when the connection drops or fails.

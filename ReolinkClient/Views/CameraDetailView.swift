@@ -31,6 +31,27 @@ struct CameraDetailView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+
+                Picker("Quality", selection: qualityBinding) {
+                    ForEach(StreamQuality.allCases) { q in
+                        Text(q.displayName).tag(q)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .fixedSize()
+
+                if viewModel.streamState.isActive {
+                    Button { viewModel.stop() } label: {
+                        Label("Stop", systemImage: "stop.fill")
+                    }
+                } else {
+                    Button { viewModel.start() } label: {
+                        Label("Start", systemImage: "play.fill")
+                    }
+                }
+                Button { viewModel.refresh() } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
                 Button {
                     Task { await snapshot() }
                 } label: {
@@ -46,6 +67,14 @@ struct CameraDetailView: View {
             Task { await viewModel.refreshDeviceInfo() }
         }
         .onDisappear { viewModel.stop() }
+    }
+
+    /// Binding that drives in-place stream switching from the toolbar.
+    private var qualityBinding: Binding<StreamQuality> {
+        Binding(
+            get: { viewModel.activeQuality },
+            set: { viewModel.switchQuality(to: $0) }
+        )
     }
 
     private var mainColumn: some View {

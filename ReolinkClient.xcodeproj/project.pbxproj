@@ -30,6 +30,7 @@
 		5F26A6D1CFFC71C46E8D3AF8 /* RTSPPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C18E9C2F04402C841ADE866 /* RTSPPlayerView.swift */; };
 		D5EA69130030EF9B48958370 /* VLCPlayerWrapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21ACDE2553C0FF5748FA0F8D /* VLCPlayerWrapper.swift */; };
 		232D87DAB185C5CAAED7DBD0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CD4D4718C21126057287B4F3 /* Assets.xcassets */; };
+		8C653B35058712D30E8D012E /* VLCKitSPM in Frameworks */ = {isa = PBXBuildFile; productRef = 7F5B366AABC84BE4460CB442 /* VLCKitSPM */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -66,6 +67,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8C653B35058712D30E8D012E /* VLCKitSPM in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -176,6 +178,9 @@
 			dependencies = (
 			);
 			name = ReolinkClient;
+			packageProductDependencies = (
+				7F5B366AABC84BE4460CB442 /* VLCKitSPM */,
+			);
 			productName = ReolinkClient;
 			productReference = 38A007151ABE87CC01A5B6E9 /* ReolinkClient.app */;
 			productType = "com.apple.product-type.application";
@@ -206,6 +211,9 @@
 			mainGroup = EDA6D6223944636B9C5B54AA;
 			productRefGroup = FBDC4F23F93125BBEEAE800C /* Products */;
 			projectDirPath = "";
+			packageReferences = (
+				808BE81DBC8BEA474F69B7E0 /* XCRemoteSwiftPackageReference "vlckit-spm" */,
+			);
 			projectRoot = "";
 			targets = (
 				0E8A3AD980EC179856012B7E /* ReolinkClient */,
@@ -367,6 +375,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		808BE81DBC8BEA474F69B7E0 /* XCRemoteSwiftPackageReference "vlckit-spm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/tylerjonesio/vlckit-spm.git";
+			requirement = {
+				kind = exactVersion;
+				version = 3.5.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		7F5B366AABC84BE4460CB442 /* VLCKitSPM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 808BE81DBC8BEA474F69B7E0 /* XCRemoteSwiftPackageReference "vlckit-spm" */;
+			productName = VLCKitSPM;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 98F54143AB4E86B28C3AFEE0 /* Project object */;
 }
