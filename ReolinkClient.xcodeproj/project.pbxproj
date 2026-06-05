@@ -20,6 +20,7 @@
 		15ECB7BC7B11C2819BA0A2A1 /* MockMedia.swift in Sources */ = {isa = PBXBuildFile; fileRef = 211372883E6A5EC8AD98A944 /* MockMedia.swift */; };
 		F58DDBACD7E82A46A92B1F31 /* CameraStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009202DFA9E68BDE48764330 /* CameraStore.swift */; };
 		20F860BAF048C95D9B199A55 /* CameraViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CD8CCA0D490C4E5E3AD500B /* CameraViewModel.swift */; };
+		9F8FCFF716EF2E368F81287A /* OnboardingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BB9D4F140F56BD38B1DC146 /* OnboardingViewModel.swift */; };
 		2B97EC644183EA2280005869 /* CameraGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F5EEEF26FE9B1318B86B94E /* CameraGridView.swift */; };
 		0D65BF5B95CA0C3E13A5614D /* CameraTileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08141C339288583EC8E183A3 /* CameraTileView.swift */; };
 		76443122A6FBD3D10A5C3000 /* CameraDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 984E00F7385B6B8105894223 /* CameraDetailView.swift */; };
@@ -27,6 +28,7 @@
 		7D34EB47806DC9353EE03183 /* PTZControlView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55BF83CF04638F21E64123D3 /* PTZControlView.swift */; };
 		7DD32151520E245712DB84DD /* EventListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 831582719713D96D26DAAC99 /* EventListView.swift */; };
 		58DB1928AEAA70D52B3A75BC /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27CAE3C0C64212D5C358F084 /* SettingsView.swift */; };
+		A9368ACA199254C088520CAC /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06025EE33E24E4F2FC448762 /* OnboardingView.swift */; };
 		5F26A6D1CFFC71C46E8D3AF8 /* RTSPPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C18E9C2F04402C841ADE866 /* RTSPPlayerView.swift */; };
 		D5EA69130030EF9B48958370 /* VLCPlayerWrapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21ACDE2553C0FF5748FA0F8D /* VLCPlayerWrapper.swift */; };
 		232D87DAB185C5CAAED7DBD0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CD4D4718C21126057287B4F3 /* Assets.xcassets */; };
@@ -48,6 +50,7 @@
 		211372883E6A5EC8AD98A944 /* MockMedia.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MockMedia.swift"; sourceTree = "<group>"; };
 		009202DFA9E68BDE48764330 /* CameraStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CameraStore.swift"; sourceTree = "<group>"; };
 		1CD8CCA0D490C4E5E3AD500B /* CameraViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CameraViewModel.swift"; sourceTree = "<group>"; };
+		5BB9D4F140F56BD38B1DC146 /* OnboardingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OnboardingViewModel.swift"; sourceTree = "<group>"; };
 		3F5EEEF26FE9B1318B86B94E /* CameraGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CameraGridView.swift"; sourceTree = "<group>"; };
 		08141C339288583EC8E183A3 /* CameraTileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CameraTileView.swift"; sourceTree = "<group>"; };
 		984E00F7385B6B8105894223 /* CameraDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CameraDetailView.swift"; sourceTree = "<group>"; };
@@ -55,6 +58,7 @@
 		55BF83CF04638F21E64123D3 /* PTZControlView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PTZControlView.swift"; sourceTree = "<group>"; };
 		831582719713D96D26DAAC99 /* EventListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EventListView.swift"; sourceTree = "<group>"; };
 		27CAE3C0C64212D5C358F084 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SettingsView.swift"; sourceTree = "<group>"; };
+		06025EE33E24E4F2FC448762 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OnboardingView.swift"; sourceTree = "<group>"; };
 		2C18E9C2F04402C841ADE866 /* RTSPPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RTSPPlayerView.swift"; sourceTree = "<group>"; };
 		21ACDE2553C0FF5748FA0F8D /* VLCPlayerWrapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VLCPlayerWrapper.swift"; sourceTree = "<group>"; };
 		CD4D4718C21126057287B4F3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Assets.xcassets"; sourceTree = "<group>"; };
@@ -135,6 +139,7 @@
 			children = (
 				009202DFA9E68BDE48764330 /* CameraStore.swift */,
 				1CD8CCA0D490C4E5E3AD500B /* CameraViewModel.swift */,
+				5BB9D4F140F56BD38B1DC146 /* OnboardingViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -149,6 +154,7 @@
 				55BF83CF04638F21E64123D3 /* PTZControlView.swift */,
 				831582719713D96D26DAAC99 /* EventListView.swift */,
 				27CAE3C0C64212D5C358F084 /* SettingsView.swift */,
+				06025EE33E24E4F2FC448762 /* OnboardingView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -250,6 +256,7 @@
 				15ECB7BC7B11C2819BA0A2A1 /* MockMedia.swift in Sources */,
 				F58DDBACD7E82A46A92B1F31 /* CameraStore.swift in Sources */,
 				20F860BAF048C95D9B199A55 /* CameraViewModel.swift in Sources */,
+				9F8FCFF716EF2E368F81287A /* OnboardingViewModel.swift in Sources */,
 				2B97EC644183EA2280005869 /* CameraGridView.swift in Sources */,
 				0D65BF5B95CA0C3E13A5614D /* CameraTileView.swift in Sources */,
 				76443122A6FBD3D10A5C3000 /* CameraDetailView.swift in Sources */,
@@ -257,6 +264,7 @@
 				7D34EB47806DC9353EE03183 /* PTZControlView.swift in Sources */,
 				7DD32151520E245712DB84DD /* EventListView.swift in Sources */,
 				58DB1928AEAA70D52B3A75BC /* SettingsView.swift in Sources */,
+				A9368ACA199254C088520CAC /* OnboardingView.swift in Sources */,
 				5F26A6D1CFFC71C46E8D3AF8 /* RTSPPlayerView.swift in Sources */,
 				D5EA69130030EF9B48958370 /* VLCPlayerWrapper.swift in Sources */,
 			);

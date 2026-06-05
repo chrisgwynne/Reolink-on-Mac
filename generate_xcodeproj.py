@@ -21,11 +21,11 @@ GROUPS = {
         "CameraDiscoveryService.swift", "KeychainService.swift",
         "SnapshotStore.swift", "MockMedia.swift",
     ],
-    "ViewModels": ["CameraStore.swift", "CameraViewModel.swift"],
+    "ViewModels": ["CameraStore.swift", "CameraViewModel.swift", "OnboardingViewModel.swift"],
     "Views": [
         "CameraGridView.swift", "CameraTileView.swift", "CameraDetailView.swift",
         "AddCameraView.swift", "PTZControlView.swift", "EventListView.swift",
-        "SettingsView.swift",
+        "SettingsView.swift", "OnboardingView.swift",
     ],
     "Video": ["RTSPPlayerView.swift", "VLCPlayerWrapper.swift"],
 }

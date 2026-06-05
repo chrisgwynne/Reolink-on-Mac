@@ -7,7 +7,7 @@ struct ContentView: View {
 
     @State private var layout: GridLayout = .twoByTwo
     @State private var selectedCamera: Camera?
-    @State private var showingAdd = false
+    @State private var showingOnboarding = false
     @State private var showingSettings = false
 
     var body: some View {
@@ -25,7 +25,7 @@ struct ContentView: View {
                 }
                 ToolbarItemGroup {
                     Button {
-                        showingAdd = true
+                        showingOnboarding = true
                     } label: {
                         Label("Add Camera", systemImage: "plus")
                     }
@@ -36,8 +36,8 @@ struct ContentView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showingAdd) {
-                AddCameraView()
+            .sheet(isPresented: $showingOnboarding) {
+                OnboardingView(store: store)
                     .environmentObject(store)
             }
             .sheet(isPresented: $showingSettings) {

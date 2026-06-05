@@ -1,14 +1,12 @@
 import SwiftUI
 
-/// Manage the configured cameras: add, edit, remove, and run network discovery.
+/// Manage the configured cameras: add (via onboarding scan or manual), edit,
+/// and remove. The "Scan LAN" entry point reuses the onboarding flow.
 struct SettingsView: View {
     @EnvironmentObject private var store: CameraStore
 
     @State private var editorRoute: EditorRoute?
-    @State private var discovering = false
-    @State private var discovered: [CameraDiscoveryService.DiscoveredCamera] = []
-
-    private let discovery = CameraDiscoveryService()
+    @State private var showingOnboarding = false
 
     /// Drives the add/edit sheet via a single `.sheet(item:)`.
     private struct EditorRoute: Identifiable {
@@ -28,21 +26,6 @@ struct SettingsView: View {
                         cameraRow(camera)
                     }
                 }
-
-                if !discovered.isEmpty {
-                    Section("Discovered on Network") {
-                        ForEach(discovered) { device in
-                            HStack {
-                                Image(systemName: "wifi")
-                                Text(device.address)
-                                Spacer()
-                                Button("Add") {
-                                    prefillFromDiscovery(device)
-                                }
-                            }
-                        }
-                    }
-                }
             }
             .listStyle(.inset)
 
@@ -50,15 +33,10 @@ struct SettingsView: View {
 
             HStack {
                 Button {
-                    Task { await runDiscovery() }
+                    showingOnboarding = true
                 } label: {
-                    if discovering {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Label("Discover", systemImage: "antenna.radiowaves.left.and.right")
-                    }
+                    Label("Scan LAN", systemImage: "antenna.radiowaves.left.and.right")
                 }
-                .disabled(discovering)
 
                 Button {
                     store.addMockCamera()
@@ -80,6 +58,10 @@ struct SettingsView: View {
         .frame(minWidth: 460, minHeight: 420)
         .sheet(item: $editorRoute) { route in
             AddCameraView(editing: route.camera)
+                .environmentObject(store)
+        }
+        .sheet(isPresented: $showingOnboarding) {
+            OnboardingView(store: store)
                 .environmentObject(store)
         }
     }
@@ -112,22 +94,6 @@ struct SettingsView: View {
             .buttonStyle(.borderless)
         }
         .padding(.vertical, 2)
-    }
-
-    private func runDiscovery() async {
-        discovering = true
-        defer { discovering = false }
-        discovered = await discovery.discover()
-    }
-
-    private func prefillFromDiscovery(_ device: CameraDiscoveryService.DiscoveredCamera) {
-        editorRoute = EditorRoute(
-            camera: Camera(
-                name: "Camera \(device.address)",
-                host: device.address,
-                username: "admin"
-            )
-        )
     }
 }
 

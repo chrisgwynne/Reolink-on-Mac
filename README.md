@@ -22,7 +22,9 @@ SwiftUI app with:
 - ✅ Events list by date, with **recorded clip playback** through the same VLC
   player as live (play, pause/resume, back-to-live, retry); "Playback not
   supported" fallback for models without it
-- ✅ ONVIF WS-Discovery (best effort)
+- ✅ **Master-login onboarding** — one credential screen scans the LAN
+  (ONVIF WS-Discovery), logs in to each found camera, and auto-adds the ones
+  that authenticate, with live per-camera status
 - ✅ **Mock camera mode** so you can run the app with no hardware
 
 - ✅ **Live RTSP playback** via VLCKit (SPM), main/sub streams, in-place quality
@@ -58,15 +60,17 @@ ReolinkClient/
 │   └── MockMedia.swift           # synthetic frames/events for dev
 ├── ViewModels/
 │   ├── CameraStore.swift         # app-wide camera list (MVVM)
-│   └── CameraViewModel.swift     # per-camera state, reconnect, snapshot, PTZ
+│   ├── CameraViewModel.swift     # per-camera state, reconnect, snapshot, PTZ
+│   └── OnboardingViewModel.swift # scan + per-camera login/auto-add
 ├── Views/
 │   ├── CameraGridView.swift      # grid layouts
 │   ├── CameraTileView.swift      # one tile
 │   ├── CameraDetailView.swift    # large view + PTZ + events
-│   ├── AddCameraView.swift       # add/edit + Test Connection
+│   ├── AddCameraView.swift       # manual add/edit + Test Connection
+│   ├── OnboardingView.swift      # "Sign in to your cameras" scan flow
 │   ├── PTZControlView.swift      # directional + zoom pad
 │   ├── EventListView.swift       # events by date
-│   └── SettingsView.swift        # manage cameras + discovery
+│   └── SettingsView.swift        # manage cameras + Scan LAN
 └── Video/
     ├── RTSPPlayerView.swift      # NSViewRepresentable host
     └── VLCPlayerWrapper.swift    # engine (real when VLCKit linked, else stub)
@@ -181,10 +185,21 @@ each tile.
 
 ## Known limitations / next steps
 
-- **ONVIF discovery** uses UDP multicast (`239.255.255.250:3702`). Under App
-  Sandbox, multicast may require Apple's `com.apple.developer.networking.multicast`
-  entitlement (request access from Apple), or run with the sandbox disabled
-  during development. Manual add always works.
+- **LAN discovery & onboarding.** "Add Camera" opens a **Sign in to your
+  cameras** screen: enter your Reolink username/password once, **Scan for
+  cameras**, and every camera that authenticates is added automatically. Each
+  result shows live status (Found → Checking login… → Added / Wrong password /
+  Unreachable). Failed cameras stay listed with **Retry** and **Add Manually**;
+  duplicates (by host/IP) are skipped. **Add manually** remains available and
+  unchanged, including per-camera credentials.
+- **macOS Local Network permission.** Discovery uses UDP WS-Discovery multicast
+  (`239.255.255.250:3702`) via `NWConnectionGroup`/`NWMulticastGroup`. On first
+  scan, macOS may prompt to allow **Local Network** access — this must be
+  granted for discovery to find cameras (System Settings ▸ Privacy & Security ▸
+  Local Network). Under App Sandbox, multicast may also require Apple's
+  `com.apple.developer.networking.multicast` entitlement (request access from
+  Apple) or running with the sandbox disabled during development. If multicast
+  is blocked on the network, manual add always works.
 - **HTTPS with self-signed certs:** the default `URLSession` will reject
   untrusted certs. Most Reolink cameras serve the API over HTTP on the LAN; add
   a `URLSessionDelegate` trust handler if you use HTTPS.
